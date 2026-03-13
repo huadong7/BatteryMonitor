@@ -35,8 +35,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // 初始化AppContextProvider
+        AppContextProvider.init(this)
+
         tvBatteryStatus = findViewById(R.id.tv_battery_status)
         tvLastNotify = findViewById(R.id.tv_last_notify)
+        val btnLogs = findViewById<android.widget.Button>(R.id.btn_logs)
+        val btnSettings = findViewById<android.widget.Button>(R.id.btn_settings)
 
         // 显示当前电量
         updateBatteryStatus()
@@ -46,6 +51,19 @@ class MainActivity : AppCompatActivity() {
 
         // 启动后台定时任务
         startBatteryMonitorWorker()
+
+        // 日志按钮点击事件
+        btnLogs.setOnClickListener {
+            showLogsDialog()
+        }
+
+        // 设置按钮点击事件
+        btnSettings.setOnClickListener {
+            val intent = android.content.Intent(this, SettingsActivity::class.java)
+            startActivity(intent)
+        }
+
+        LogUtils.log(TAG, "应用启动")
     }
 
     /**
@@ -92,9 +110,10 @@ class MainActivity : AppCompatActivity() {
             .setRequiredNetworkType(NetworkType.CONNECTED) // 需要网络连接
             .build()
 
-        // 每15分钟执行一次
+        // 每15分钟执行一次，flex interval设置为1分钟以提高执行精度
         val workRequest = PeriodicWorkRequestBuilder<BatteryCheckWorker>(
-            15, TimeUnit.MINUTES
+            15, TimeUnit.MINUTES,
+            1, TimeUnit.MINUTES // flex interval: 在周期结束前1分钟内执行
         )
             .setConstraints(constraints)
             .addTag(AppConfig.WORK_TAG)
@@ -106,7 +125,7 @@ class MainActivity : AppCompatActivity() {
             workRequest
         )
 
-        Log.d(TAG, "Battery monitor worker started, checking every 15 minutes")
+        LogUtils.log(TAG, "Battery monitor worker started, checking every 15 minutes")
         Toast.makeText(this, "电量监控已启动，每15分钟检测一次电量", Toast.LENGTH_SHORT).show()
     }
 
@@ -116,6 +135,32 @@ class MainActivity : AppCompatActivity() {
     private fun formatTime(timestamp: Long): String {
         val sdf = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
         return sdf.format(java.util.Date(timestamp))
+    }
+
+    /**
+     * 显示日志对话框
+     */
+    private fun showLogsDialog() {
+        val logContent = LogUtils.getLogContent()
+        
+        val builder = android.app.AlertDialog.Builder(this)
+        builder.setTitle("电量监控日志")
+        
+        val scrollView = android.widget.ScrollView(this)
+        val textView = android.widget.TextView(this)
+        textView.text = logContent
+        textView.setPadding(16, 16, 16, 16)
+        textView.textSize = 12f
+        scrollView.addView(textView)
+        
+        builder.setView(scrollView)
+        builder.setPositiveButton("确定", null)
+        builder.setNegativeButton("清空日志") { _, _ ->
+            LogUtils.clearLogs()
+            LogUtils.log(TAG, "日志已清空")
+        }
+        
+        builder.create().show()
     }
 }
 
@@ -138,30 +183,34 @@ class BatteryCheckWorker(
         .build()
 
     override suspend fun doWork(): Result {
-        Log.d(TAG, "Battery check worker running...")
+        LogUtils.log(TAG, "Battery check worker running...")
 
         // 获取当前电量
         val batteryLevel = getBatteryLevel()
-        Log.d(TAG, "Current battery level: $batteryLevel%")
+        LogUtils.log(TAG, "Current battery level: $batteryLevel%")
 
+        // 动态获取电量阈值
+        val threshold = AppConfig.getBatteryThreshold(applicationContext)
+        LogUtils.log(TAG, "Current battery threshold: $threshold%")
+        
         // 检查是否低于阈值
-        if (batteryLevel < AppConfig.LOW_BATTERY_THRESHOLD) {
-            Log.d(TAG, "Battery low, checking cooldown...")
+        if (batteryLevel < threshold) {
+            LogUtils.log(TAG, "Battery low, checking cooldown...")
             
             // 检查是否在冷却时间内（防重复）
             if (canSendNotification()) {
                 val success = sendToFeishu(batteryLevel)
                 if (success) {
                     recordNotificationTime()
-                    Log.d(TAG, "Notification sent successfully, next notification in 15 minutes")
+                    LogUtils.log(TAG, "Notification sent successfully, next notification in 15 minutes")
                 } else {
-                    Log.e(TAG, "Failed to send notification")
+                    LogUtils.logError(TAG, "Failed to send notification")
                 }
             } else {
-                Log.d(TAG, "In cooldown period (15 minutes), skip notification")
+                LogUtils.log(TAG, "In cooldown period (15 minutes), skip notification")
             }
         } else {
-            Log.d(TAG, "Battery level OK, no action needed")
+            LogUtils.log(TAG, "Battery level OK, no action needed")
         }
 
         return Result.success()
@@ -177,13 +226,16 @@ class BatteryCheckWorker(
 
     /**
      * 检查是否可以发送通知（防重复）
+     * 暂时注释掉间隔限制，每次检测到低电量都会发送通知
      */
     private fun canSendNotification(): Boolean {
-        val prefs = applicationContext.getSharedPreferences(AppConfig.PREF_NAME, Context.MODE_PRIVATE)
-        val lastNotifyTime = prefs.getLong(AppConfig.KEY_LAST_NOTIFY_TIME, 0)
-        val currentTime = System.currentTimeMillis()
+        // 暂时注释掉防重复逻辑
+        // val prefs = applicationContext.getSharedPreferences(AppConfig.PREF_NAME, Context.MODE_PRIVATE)
+        // val lastNotifyTime = prefs.getLong(AppConfig.KEY_LAST_NOTIFY_TIME, 0)
+        // val currentTime = System.currentTimeMillis()
+        // return (currentTime - lastNotifyTime) >= AppConfig.MIN_NOTIFY_INTERVAL_MS
         
-        return (currentTime - lastNotifyTime) >= AppConfig.MIN_NOTIFY_INTERVAL_MS
+        return true // 总是返回true，允许每次发送通知
     }
 
     /**
@@ -200,8 +252,9 @@ class BatteryCheckWorker(
     private fun sendToFeishu(batteryLevel: Int): Boolean {
         val webhookUrl = AppConfig.FEISHU_WEBHOOK_URL
         
-        // 获取设备名称
-        val deviceName = android.os.Build.MODEL
+        // 获取设备名称（从设置中读取，或使用默认设备型号）
+        val deviceName = AppConfig.getDeviceName(applicationContext)
+        LogUtils.log(TAG, "Device name: $deviceName")
         
         // 计算下次检测时间（15分钟后）
         val nextCheckTime = System.currentTimeMillis() + 15 * 60 * 1000
@@ -212,9 +265,11 @@ class BatteryCheckWorker(
         val jsonBody = JSONObject().apply {
             put("msg_type", "text")
             put("content", JSONObject().apply {
+                // 动态获取电量阈值
+                val threshold = AppConfig.getBatteryThreshold(applicationContext)
                 put("text", "🔋 电量警报：\n" +
                         "设备名称：$deviceName\n" +
-                        "当前电量：$batteryLevel%，低于${AppConfig.LOW_BATTERY_THRESHOLD}%！请及时充电\n" +
+                        "当前电量：$batteryLevel%，低于${threshold}%！请及时充电\n" +
                         "下次检测：$nextCheckTimeStr")
             })
         }
@@ -230,10 +285,10 @@ class BatteryCheckWorker(
         return try {
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string()
-            Log.d(TAG, "Feishu response: $responseBody")
+            LogUtils.log(TAG, "Feishu response: $responseBody")
             response.isSuccessful
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send to Feishu: ${e.message}")
+            LogUtils.logError(TAG, "Failed to send to Feishu: ${e.message}", e)
             false
         }
     }
