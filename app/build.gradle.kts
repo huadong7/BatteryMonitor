@@ -1,4 +1,5 @@
 import java.util.Properties
+import com.android.build.api.variant.ApplicationAndroidComponentsExtension
 
 plugins {
     id("com.android.application")
@@ -18,7 +19,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.1"
         
         // 从 local.properties 读取飞书 Webhook URL
         val localProperties = Properties()
@@ -49,6 +50,15 @@ android {
     
     kotlinOptions {
         jvmTarget = "1.8"
+    }
+    
+    applicationVariants.all {
+        val variantName = name
+        val versionName = versionName
+        outputs.all {
+            this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
+            outputFileName = "batteryMonitor-${variantName}-${versionName}.apk"
+        }
     }
 }
 

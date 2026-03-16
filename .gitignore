@@ -21,9 +21,11 @@ Thumbs.db
 *.log
 
 # 构建产物
-/app/build/
+app/build/
 /build/
 
 # 临时文件
 *.tmp
 *.temp
+app/release/batteryMonitor-release-1.1.apk
+app/release/output-metadata.json
