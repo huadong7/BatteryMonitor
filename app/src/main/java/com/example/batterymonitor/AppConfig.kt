@@ -43,4 +43,22 @@ object AppConfig {
             savedName
         }
     }
+    
+    // 主题模式配置
+    const val KEY_THEME_MODE = "theme_mode"
+    const val THEME_MODE_SYSTEM = "system"
+    const val THEME_MODE_LIGHT = "light"
+    const val THEME_MODE_DARK = "dark"
+    
+    // 获取当前主题模式
+    fun getThemeMode(context: Context): String {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_THEME_MODE, THEME_MODE_SYSTEM) ?: THEME_MODE_SYSTEM
+    }
+    
+    // 设置主题模式
+    fun setThemeMode(context: Context, mode: String) {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_THEME_MODE, mode).apply()
+    }
 }

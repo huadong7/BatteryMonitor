@@ -29,3 +29,5 @@ app/build/
 *.temp
 app/release/batteryMonitor-release-1.1.apk
 app/release/output-metadata.json
+app/debug/batteryMonitor-debug-1.1.apk
+app/debug/output-metadata.json

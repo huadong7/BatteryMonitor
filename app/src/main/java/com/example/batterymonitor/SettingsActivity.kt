@@ -15,15 +15,30 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var sbBatteryThreshold: SeekBar
     private lateinit var tvBatteryThresholdValue: TextView
     private lateinit var btnSave: Button
+    private lateinit var rgThemeMode: android.widget.RadioGroup
+    private lateinit var rbThemeSystem: android.widget.RadioButton
+    private lateinit var rbThemeLight: android.widget.RadioButton
+    private lateinit var rbThemeDark: android.widget.RadioButton
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 应用主题
+        ThemeHelper.applyTheme(this)
+        
         setContentView(R.layout.activity_settings)
 
         etDeviceName = findViewById(R.id.et_device_name)
         sbBatteryThreshold = findViewById(R.id.sb_battery_threshold)
         tvBatteryThresholdValue = findViewById(R.id.tv_battery_threshold_value)
         btnSave = findViewById(R.id.btn_save)
+        rgThemeMode = findViewById(R.id.rg_theme_mode)
+        rbThemeSystem = findViewById(R.id.rb_theme_system)
+        rbThemeLight = findViewById(R.id.rb_theme_light)
+        rbThemeDark = findViewById(R.id.rb_theme_dark)
+        
+        // 设置状态栏和导航栏颜色
+        ThemeHelper.setStatusBarAndNavigationBar(this)
 
         // 加载当前设置
         loadSettings()
@@ -55,6 +70,14 @@ class SettingsActivity : AppCompatActivity() {
         val threshold = prefs.getInt(AppConfig.KEY_BATTERY_THRESHOLD, AppConfig.DEFAULT_LOW_BATTERY_THRESHOLD)
         sbBatteryThreshold.progress = threshold
         tvBatteryThresholdValue.text = "${threshold}%"
+        
+        // 加载主题模式
+        val themeMode = AppConfig.getThemeMode(this)
+        when (themeMode) {
+            AppConfig.THEME_MODE_SYSTEM -> rbThemeSystem.isChecked = true
+            AppConfig.THEME_MODE_LIGHT -> rbThemeLight.isChecked = true
+            AppConfig.THEME_MODE_DARK -> rbThemeDark.isChecked = true
+        }
     }
 
     private fun saveSettings() {
@@ -69,7 +92,19 @@ class SettingsActivity : AppCompatActivity() {
         val threshold = sbBatteryThreshold.progress
         editor.putInt(AppConfig.KEY_BATTERY_THRESHOLD, threshold)
         
+        // 保存主题模式
+        val themeMode = when (rgThemeMode.checkedRadioButtonId) {
+            R.id.rb_theme_system -> AppConfig.THEME_MODE_SYSTEM
+            R.id.rb_theme_light -> AppConfig.THEME_MODE_LIGHT
+            R.id.rb_theme_dark -> AppConfig.THEME_MODE_DARK
+            else -> AppConfig.THEME_MODE_SYSTEM
+        }
+        AppConfig.setThemeMode(this, themeMode)
+        
         editor.apply()
+        
+        // 应用新主题
+        ThemeHelper.applyTheme(this)
         
         Toast.makeText(this, "设置已保存", Toast.LENGTH_SHORT).show()
         finish()

@@ -33,10 +33,17 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 应用主题
+        ThemeHelper.applyTheme(this)
+        
         setContentView(R.layout.activity_main)
 
         // 初始化AppContextProvider
         AppContextProvider.init(this)
+        
+        // 设置状态栏和导航栏颜色
+        ThemeHelper.setStatusBarAndNavigationBar(this)
 
         tvBatteryStatus = findViewById(R.id.tv_battery_status)
         tvLastNotify = findViewById(R.id.tv_last_notify)
